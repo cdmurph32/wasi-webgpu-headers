@@ -10,6 +10,8 @@ noreturn void todo() { abort(); }
 
 noreturn void unreachable() { abort(); }
 
+noreturn void oom() { abort(); }
+
 typedef struct WGPUAdapterImpl {
     wasi_webgpu_webgpu_own_gpu_adapter_t adapter;
     uint32_t refCount;
@@ -111,6 +113,7 @@ WGPUBufferMapState bufferMapStateWasiToNative(wasi_webgpu_webgpu_gpu_buffer_map_
 
 WGPUInstance wgpuCreateInstance(WGPUInstanceDescriptor const* descriptor) {
     WGPUInstanceImpl* instance = malloc(sizeof(WGPUInstanceImpl));
+    if (!instance) oom();
     instance->refCount = 1;
     instance->gpu = wasi_webgpu_webgpu_get_gpu();
     return instance;
@@ -170,6 +173,7 @@ WGPUFuture wgpuAdapterRequestDevice(
                 .ptr = malloc(descriptor->requiredFeatureCount * sizeof(wasi_webgpu_webgpu_gpu_feature_name_t)),
                 .len = descriptor->requiredFeatureCount,
             };
+            if (!descriptor_wasi.required_features.val.ptr) oom();
 
             for (size_t i = 0; i < descriptor->requiredFeatureCount; i++) {
                 descriptor_wasi.required_features.val.ptr[i] = featureNativeToWasi(descriptor->requiredFeatures[i]);
@@ -192,6 +196,7 @@ WGPUFuture wgpuAdapterRequestDevice(
     }
 
     WGPUDeviceImpl* device = malloc(sizeof(WGPUDeviceImpl));
+    if (!device) oom();
     device->refCount = 1;
     device->device = wasi_device;
 
@@ -290,6 +295,7 @@ void* wgpuBufferGetMappedRange(WGPUBuffer buffer, size_t offset, size_t size) {
     }
 
     imports_list_u8_t* mapping = malloc(sizeof(imports_list_u8_t));
+    if (!mapping) oom();
     wasi_webgpu_webgpu_get_mapped_range_error_t err;
 
     bool success = wasi_webgpu_webgpu_method_gpu_buffer_get_mapped_range_get_with_copy(
@@ -478,6 +484,7 @@ wgpuCommandEncoderBeginComputePass(WGPUCommandEncoder commandEncoder, WGPUComput
     wasi_webgpu_webgpu_gpu_compute_pass_descriptor_free(&descriptor_wasi);
 
     WGPUComputePassEncoderImpl* compute_pass_encoder_struct = malloc(sizeof(WGPUComputePassEncoderImpl));
+    if (!compute_pass_encoder_struct) oom();
     compute_pass_encoder_struct->compute_pass_encoder = compute_pass_encoder;
     compute_pass_encoder_struct->refCount = 1;
     return compute_pass_encoder_struct;
@@ -544,6 +551,7 @@ wgpuCommandEncoderFinish(WGPUCommandEncoder commandEncoder, WGPUCommandBufferDes
     wasi_webgpu_webgpu_gpu_command_buffer_descriptor_free(&descriptor_wasi);
 
     WGPUCommandBufferImpl* command_buffer_struct = malloc(sizeof(WGPUCommandBufferImpl));
+    if (!command_buffer_struct) oom();
     command_buffer_struct->command_buffer = command_buffer_wasi;
     command_buffer_struct->refCount = 1;
     return command_buffer_struct;
@@ -653,6 +661,7 @@ void wgpuComputePassEncoderSetBindGroup(
             .ptr = malloc(dynamicOffsetCount * sizeof(wasi_webgpu_webgpu_gpu_buffer_dynamic_offset_t)),
             .len = dynamicOffsetCount,
         };
+        if (!offsets_data_val.ptr) oom();
         memcpy(
             offsets_data_val.ptr,
             dynamicOffsets,
@@ -716,6 +725,7 @@ WGPUBindGroupLayout wgpuComputePipelineGetBindGroupLayout(WGPUComputePipeline co
             groupIndex
         );
     WGPUBindGroupLayoutImpl* bind_group_layout_struct = malloc(sizeof(WGPUBindGroupLayoutImpl));
+    if (!bind_group_layout_struct) oom();
     bind_group_layout_struct->bind_group_layout = bind_group_layout;
     bind_group_layout_struct->refCount = 1;
     return (WGPUBindGroupLayout)bind_group_layout_struct;
@@ -745,6 +755,7 @@ WGPUBindGroup wgpuDeviceCreateBindGroup(WGPUDevice device, WGPUBindGroupDescript
 
     wasi_webgpu_webgpu_gpu_bind_group_entry_t* entries_array =
         malloc(descriptor->entryCount * sizeof(wasi_webgpu_webgpu_gpu_bind_group_entry_t));
+    if (!entries_array) oom();
 
     for (size_t i = 0; i < descriptor->entryCount; i++) {
         wasi_webgpu_webgpu_gpu_binding_resource_t resource = {};
@@ -795,6 +806,7 @@ WGPUBindGroup wgpuDeviceCreateBindGroup(WGPUDevice device, WGPUBindGroupDescript
     wasi_webgpu_webgpu_gpu_bind_group_descriptor_free(&descriptor_wasi);
 
     WGPUBindGroupImpl* bind_group_struct = malloc(sizeof(WGPUBindGroupImpl));
+    if (!bind_group_struct) oom();
     bind_group_struct->bind_group = bind_group;
     bind_group_struct->refCount = 1;
     return bind_group_struct;
@@ -828,6 +840,7 @@ WGPUBuffer wgpuDeviceCreateBuffer(WGPUDevice device, WGPUBufferDescriptor const*
     wasi_webgpu_webgpu_gpu_buffer_descriptor_free(&descriptor_wasi);
 
     WGPUBufferImpl* buffer_struct = malloc(sizeof(WGPUBufferImpl));
+    if (!buffer_struct) oom();
     buffer_struct->buffer = buffer;
     buffer_struct->refCount = 1;
     buffer_struct->mapping = NULL;
@@ -850,6 +863,7 @@ WGPUCommandEncoder wgpuDeviceCreateCommandEncoder(WGPUDevice device, WGPUCommand
     wasi_webgpu_webgpu_gpu_command_encoder_descriptor_free(&descriptor_wasi);
 
     WGPUCommandEncoderImpl* command_encoder_struct = malloc(sizeof(WGPUCommandEncoderImpl));
+    if (!command_encoder_struct) oom();
     command_encoder_struct->command_encoder = command_encoder;
     command_encoder_struct->refCount = 1;
     return command_encoder_struct;
@@ -872,6 +886,7 @@ wgpuDeviceCreateComputePipeline(WGPUDevice device, WGPUComputePipelineDescriptor
     if (entry_point_wasi.is_some) {
         entry_point_wasi.val = (imports_string_t){.ptr = malloc(descriptor->compute.entryPoint.length),
                                                   .len = descriptor->compute.entryPoint.length};
+        if (!entry_point_wasi.val.ptr) oom();
         memcpy(entry_point_wasi.val.ptr, descriptor->compute.entryPoint.data, descriptor->compute.entryPoint.length);
     }
 
@@ -884,6 +899,7 @@ wgpuDeviceCreateComputePipeline(WGPUDevice device, WGPUComputePipelineDescriptor
         for (size_t i = 0; i < descriptor->compute.constantCount; i++) {
             imports_string_t key = {};
             key.ptr = malloc(descriptor->compute.constants[i].key.length);
+            if (!key.ptr) oom();
             key.len = descriptor->compute.constants[i].key.length;
             memcpy(key.ptr, descriptor->compute.constants[i].key.data, descriptor->compute.constants[i].key.length);
 
@@ -914,6 +930,7 @@ wgpuDeviceCreateComputePipeline(WGPUDevice device, WGPUComputePipelineDescriptor
     wasi_webgpu_webgpu_gpu_compute_pipeline_descriptor_free(&descriptor_wasi);
 
     WGPUComputePipelineImpl* compute_pipeline_struct = malloc(sizeof(WGPUComputePipelineImpl));
+    if (!compute_pipeline_struct) oom();
     compute_pipeline_struct->compute_pipeline = compute_pipeline;
     compute_pipeline_struct->refCount = 1;
     return (WGPUComputePipeline)compute_pipeline_struct;
@@ -970,6 +987,7 @@ WGPUShaderModule wgpuDeviceCreateShaderModule(WGPUDevice device, WGPUShaderModul
         .ptr = malloc(wgsl_source->code.length),
         .len = wgsl_source->code.length,
     };
+    if (!code_wasi.ptr) oom();
     memcpy(code_wasi.ptr, wgsl_source->code.data, wgsl_source->code.length);
 
     wasi_webgpu_webgpu_gpu_shader_module_descriptor_t descriptor_wasi = {
@@ -990,6 +1008,7 @@ WGPUShaderModule wgpuDeviceCreateShaderModule(WGPUDevice device, WGPUShaderModul
     wasi_webgpu_webgpu_gpu_shader_module_descriptor_free(&descriptor_wasi);
 
     WGPUShaderModuleImpl* shader_module_struct = malloc(sizeof(WGPUShaderModuleImpl));
+    if (!shader_module_struct) oom();
     shader_module_struct->module = shader_module;
     shader_module_struct->refCount = 1;
     return shader_module_struct;
@@ -1025,6 +1044,7 @@ WGPUQueue wgpuDeviceGetQueue(WGPUDevice device) {
         wasi_webgpu_webgpu_method_gpu_device_queue(wasi_webgpu_webgpu_borrow_gpu_device(device->device));
 
     WGPUQueueImpl* queue_struct = malloc(sizeof(WGPUQueueImpl));
+    if (!queue_struct) oom();
     queue_struct->queue = queue;
     queue_struct->refCount = 1;
     return queue_struct;
@@ -1111,6 +1131,7 @@ WGPUFuture wgpuInstanceRequestAdapter(
     }
 
     WGPUAdapterImpl* adapter = malloc(sizeof(WGPUAdapterImpl));
+    if (!adapter) oom();
     adapter->refCount = 1;
     adapter->adapter = wasi_adapter;
 
@@ -1212,6 +1233,7 @@ void wgpuQueueSubmit(WGPUQueue queue, size_t commandCount, WGPUCommandBuffer con
         .ptr = malloc(sizeof(wasi_webgpu_webgpu_borrow_gpu_command_buffer_t) * commandCount),
         .len = commandCount
     };
+    if (!commands_wasi.ptr) oom();
     for (size_t i = 0; i < commandCount; i++) {
         commands_wasi.ptr[i] = wasi_webgpu_webgpu_borrow_gpu_command_buffer(commands[i]->command_buffer);
     }
@@ -1661,6 +1683,7 @@ imports_option_string_t labelNativeToWasi(WGPUStringView const* label) {
 
     output.is_some = true;
     output.val.ptr = malloc(label->length + 1);
+    if (!output.val.ptr) oom();
     memcpy(output.val.ptr, label->data, label->length + 1);
     output.val.len = label->length;
 
@@ -1706,11 +1729,13 @@ imports_option_string_t featureLevelNativeToWasi(WGPUFeatureLevel featureLevel) 
     switch (featureLevel) {
     case WGPUFeatureLevel_Compatibility:
         output.val.ptr = malloc(strlen(compatibility) + 1);
+        if (!output.val.ptr) oom();
         memcpy(output.val.ptr, compatibility, strlen(compatibility) + 1);
         output.val.len = strlen(compatibility);
         break;
     case WGPUFeatureLevel_Core:
         output.val.ptr = malloc(strlen(core) + 1);
+        if (!output.val.ptr) oom();
         memcpy(output.val.ptr, core, strlen(core) + 1);
         output.val.len = strlen(core);
         break;
@@ -1863,6 +1888,7 @@ imports_string_t featureNativeToWasiString(WGPUFeatureName const feature) {
     imports_string_t output = {};
     size_t len = strlen(c_string);
     output.ptr = malloc(len);
+    if (!output.ptr) oom();
     memcpy(output.ptr, c_string, len);
     output.len = len;
     return output;
