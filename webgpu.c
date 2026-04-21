@@ -209,10 +209,11 @@ WGPUFuture wgpuAdapterRequestDevice(
 
     wasi_webgpu_webgpu_gpu_device_descriptor_free(&descriptor_wasi);
 
+    static const WGPUStringView empty_msg = {.data = "", .length = 0};
     callbackInfo.callback(
         WGPURequestDeviceStatus_Success,
         device,
-        WGPU_STRING_VIEW_INIT,
+        empty_msg,
         callbackInfo.userdata1,
         callbackInfo.userdata2
     );
@@ -365,8 +366,9 @@ WGPUFuture wgpuBufferMapAsync(
         todo();
     }
 
+    static const WGPUStringView empty_msg_map = {.data = "", .length = 0};
     callbackInfo
-        .callback(WGPUMapAsyncStatus_Success, WGPU_STRING_VIEW_INIT, callbackInfo.userdata1, callbackInfo.userdata2);
+        .callback(WGPUMapAsyncStatus_Success, empty_msg_map, callbackInfo.userdata1, callbackInfo.userdata2);
 
     return (WGPUFuture){.id = 0};
 }
@@ -1114,11 +1116,15 @@ WGPUStatus wgpuDeviceGetAdapterInfo(WGPUDevice device, WGPUAdapterInfo* adapterI
     wasi_webgpu_webgpu_method_gpu_adapter_info_device(b, &dev);
     wasi_webgpu_webgpu_method_gpu_adapter_info_description(b, &description);
 
-    // WGPUStringView OutputStrings — caller owns; null-terminate for safety
-    adapterInfo->vendor = (WGPUStringView){ (const char*)vendor.ptr, vendor.len };
-    adapterInfo->architecture = (WGPUStringView){ (const char*)architecture.ptr, architecture.len };
-    adapterInfo->device = (WGPUStringView){ (const char*)dev.ptr, dev.len };
-    adapterInfo->description = (WGPUStringView){ (const char*)description.ptr, description.len };
+    // WGPUStringView OutputStrings — caller owns.
+    // cabi_realloc returns (void*)align for zero-size allocations — not a real heap ptr.
+    // Only store the ptr when len > 0 (guaranteed malloc'd); use NULL for empty strings.
+#define WGPU_SAFE_STRING_VIEW(s) ((s).len > 0 ? (WGPUStringView){ (const char*)(s).ptr, (s).len } : (WGPUStringView){ NULL, 0 })
+    adapterInfo->vendor = WGPU_SAFE_STRING_VIEW(vendor);
+    adapterInfo->architecture = WGPU_SAFE_STRING_VIEW(architecture);
+    adapterInfo->device = WGPU_SAFE_STRING_VIEW(dev);
+    adapterInfo->description = WGPU_SAFE_STRING_VIEW(description);
+#undef WGPU_SAFE_STRING_VIEW
     adapterInfo->subgroupMinSize = wasi_webgpu_webgpu_method_gpu_adapter_info_subgroup_min_size(b);
     adapterInfo->subgroupMaxSize = wasi_webgpu_webgpu_method_gpu_adapter_info_subgroup_max_size(b);
 
@@ -1218,12 +1224,16 @@ WGPUFuture wgpuDevicePopErrorScope(WGPUDevice device, WGPUPopErrorScopeCallbackI
         &wasi_err
     );
 
+    // WGPU_STRING_VIEW_INIT = {NULL, SIZE_MAX} causes StringViewAdapter to crash.
+    // Always pass a proper empty null-terminated string when there is no message.
+    static const WGPUStringView empty_msg = {.data = "", .length = 0};
+
     if (!success) {
         wasi_webgpu_webgpu_pop_error_scope_error_free(&wasi_err);
         callbackInfo.callback(
             WGPUPopErrorScopeStatus_Error,
             WGPUErrorType_Unknown,
-            WGPU_STRING_VIEW_INIT,
+            empty_msg,
             callbackInfo.userdata1,
             callbackInfo.userdata2
         );
@@ -1234,7 +1244,7 @@ WGPUFuture wgpuDevicePopErrorScope(WGPUDevice device, WGPUPopErrorScopeCallbackI
         callbackInfo.callback(
             WGPUPopErrorScopeStatus_Success,
             WGPUErrorType_NoError,
-            WGPU_STRING_VIEW_INIT,
+            empty_msg,
             callbackInfo.userdata1,
             callbackInfo.userdata2
         );
@@ -1368,10 +1378,11 @@ WGPUFuture wgpuInstanceRequestAdapter(
 
     wasi_webgpu_webgpu_gpu_request_adapter_options_free(&wasi_options);
 
+    static const WGPUStringView empty_msg = {.data = "", .length = 0};
     callbackInfo.callback(
         WGPURequestAdapterStatus_Success,
         adapter,
-        WGPU_STRING_VIEW_INIT,
+        empty_msg,
         callbackInfo.userdata1,
         callbackInfo.userdata2
     );
@@ -1910,11 +1921,17 @@ imports_option_string_t optionalStringNativeToWasi(WGPUStringView const* stringN
     imports_option_string_t string_wasi = {};
     if (!stringNative || !stringNative->data) return string_wasi;
 
+    size_t len = stringNative->length;
+    if (len == WGPU_STRLEN) {
+        // WGPU_STRLEN sentinel means null-terminated — compute actual length
+        len = strlen(stringNative->data);
+    }
+
     string_wasi.is_some = true;
-    string_wasi.val.ptr = malloc(stringNative->length);
+    string_wasi.val.ptr = malloc(len);
     if (!string_wasi.val.ptr) oom();
-    memcpy(string_wasi.val.ptr, stringNative->data, stringNative->length);
-    string_wasi.val.len = stringNative->length;
+    memcpy(string_wasi.val.ptr, stringNative->data, len);
+    string_wasi.val.len = len;
 
     return string_wasi;
 }
@@ -1922,10 +1939,17 @@ imports_option_string_t optionalStringNativeToWasi(WGPUStringView const* stringN
 imports_string_t stringNativeToWasi(WGPUStringView const* stringNative) {
     if (!stringNative || !stringNative->data) unreachable();
 
+    size_t len = stringNative->length;
+    if (len == WGPU_STRLEN) {
+        // WGPU_STRLEN sentinel means null-terminated — compute actual length
+        len = strlen(stringNative->data);
+    }
+
     imports_string_t string_wasi = {};
-    string_wasi.ptr = malloc(stringNative->length);
-    memcpy(string_wasi.ptr, stringNative->data, stringNative->length);
-    string_wasi.len = stringNative->length;
+    string_wasi.ptr = malloc(len);
+    if (!string_wasi.ptr) oom();
+    memcpy(string_wasi.ptr, stringNative->data, len);
+    string_wasi.len = len;
 
     return string_wasi;
 }
