@@ -1796,8 +1796,6 @@ void wgpuShaderModuleRelease(WGPUShaderModule shaderModule) {
     }
 }
 
-// wgpuSupportedFeaturesFreeMembers — implemented at end of file
-
 // void wgpuSupportedWGSLLanguageFeaturesFreeMembers(WGPUSupportedWGSLLanguageFeatures supportedWGSLLanguageFeatures)
 // {
 // }
