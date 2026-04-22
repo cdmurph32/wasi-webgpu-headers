@@ -235,13 +235,14 @@ void wgpuAdapterRelease(WGPUAdapter adapter) {
     }
 }
 
-// void wgpuAdapterInfoFreeMembers(WGPUAdapterInfo adapterInfo)
-// {
-// }
+void wgpuAdapterInfoFreeMembers(WGPUAdapterInfo adapterInfo) {
+    if (adapterInfo.vendor.data) free((void*)adapterInfo.vendor.data);
+    if (adapterInfo.architecture.data) free((void*)adapterInfo.architecture.data);
+    if (adapterInfo.device.data) free((void*)adapterInfo.device.data);
+    if (adapterInfo.description.data) free((void*)adapterInfo.description.data);
+}
 
-// void wgpuBindGroupSetLabel(WGPUBindGroup bindGroup, WGPUStringView label)
-// {
-// }
+void wgpuBindGroupSetLabel(WGPUBindGroup bindGroup, WGPUStringView label) { (void)bindGroup; (void)label; }
 
 void wgpuBindGroupAddRef(WGPUBindGroup bindGroup) {
     if (!bindGroup) unreachable();
@@ -258,9 +259,7 @@ void wgpuBindGroupRelease(WGPUBindGroup bindGroup) {
     }
 }
 
-// void wgpuBindGroupLayoutSetLabel(WGPUBindGroupLayout bindGroupLayout, WGPUStringView label)
-// {
-// }
+void wgpuBindGroupLayoutSetLabel(WGPUBindGroupLayout bindGroupLayout, WGPUStringView label) { (void)bindGroupLayout; (void)label; }
 
 void wgpuBindGroupLayoutAddRef(WGPUBindGroupLayout bindGroupLayout) {
     if (!bindGroupLayout) unreachable();
@@ -277,9 +276,10 @@ void wgpuBindGroupLayoutRelease(WGPUBindGroupLayout bindGroupLayout) {
     }
 }
 
-// void wgpuBufferDestroy(WGPUBuffer buffer)
-// {
-// }
+void wgpuBufferDestroy(WGPUBuffer buffer) {
+    if (!buffer) return;
+    wasi_webgpu_webgpu_method_gpu_buffer_destroy(wasi_webgpu_webgpu_borrow_gpu_buffer(buffer->buffer));
+}
 
 void const* wgpuBufferGetConstMappedRange(WGPUBuffer buffer, size_t offset, size_t size) {
     return wgpuBufferGetMappedRange(buffer, offset, size);
@@ -436,9 +436,7 @@ void wgpuBufferRelease(WGPUBuffer buffer) {
     }
 }
 
-// void wgpuCommandBufferSetLabel(WGPUCommandBuffer commandBuffer, WGPUStringView label)
-// {
-// }
+void wgpuCommandBufferSetLabel(WGPUCommandBuffer commandBuffer, WGPUStringView label) { (void)commandBuffer; (void)label; }
 
 void wgpuCommandBufferAddRef(WGPUCommandBuffer commandBuffer) {
     if (!commandBuffer) unreachable();
@@ -753,9 +751,7 @@ WGPUBindGroupLayout wgpuComputePipelineGetBindGroupLayout(WGPUComputePipeline co
     return (WGPUBindGroupLayout)bind_group_layout_struct;
 }
 
-// void wgpuComputePipelineSetLabel(WGPUComputePipeline computePipeline, WGPUStringView label)
-// {
-// }
+void wgpuComputePipelineSetLabel(WGPUComputePipeline computePipeline, WGPUStringView label) { (void)computePipeline; (void)label; }
 
 void wgpuComputePipelineAddRef(WGPUComputePipeline computePipeline) {
     if (!computePipeline) unreachable();
@@ -1100,9 +1096,10 @@ WGPUShaderModule wgpuDeviceCreateShaderModule(WGPUDevice device, WGPUShaderModul
 // {
 // }
 
-// void wgpuDeviceDestroy(WGPUDevice device)
-// {
-// }
+void wgpuDeviceDestroy(WGPUDevice device) {
+    if (!device) return;
+    wasi_webgpu_webgpu_method_gpu_device_destroy(wasi_webgpu_webgpu_borrow_gpu_device(device->device));
+}
 
 WGPUStatus wgpuDeviceGetAdapterInfo(WGPUDevice device, WGPUAdapterInfo* adapterInfo) {
     if (!device || !adapterInfo) unreachable();
@@ -1309,9 +1306,7 @@ void wgpuDevicePushErrorScope(WGPUDevice device, WGPUErrorFilter filter) {
     );
 }
 
-// void wgpuDeviceSetLabel(WGPUDevice device, WGPUStringView label)
-// {
-// }
+void wgpuDeviceSetLabel(WGPUDevice device, WGPUStringView label) { (void)device; (void)label; }
 
 void wgpuDeviceAddRef(WGPUDevice device) {
     if (!device) unreachable();
@@ -1411,9 +1406,7 @@ void wgpuInstanceRelease(WGPUInstance instance) {
     }
 }
 
-// void wgpuPipelineLayoutSetLabel(WGPUPipelineLayout pipelineLayout, WGPUStringView label)
-// {
-// }
+void wgpuPipelineLayoutSetLabel(WGPUPipelineLayout pipelineLayout, WGPUStringView label) { (void)pipelineLayout; (void)label; }
 
 void wgpuPipelineLayoutAddRef(WGPUPipelineLayout pipelineLayout) {
     if (!pipelineLayout) unreachable();
@@ -1430,9 +1423,10 @@ void wgpuPipelineLayoutRelease(WGPUPipelineLayout pipelineLayout) {
     }
 }
 
-// void wgpuQuerySetDestroy(WGPUQuerySet querySet)
-// {
-// }
+void wgpuQuerySetDestroy(WGPUQuerySet querySet) {
+    if (!querySet) return;
+    wasi_webgpu_webgpu_method_gpu_query_set_destroy(wasi_webgpu_webgpu_borrow_gpu_query_set(querySet->query_set));
+}
 
 // uint32_t wgpuQuerySetGetCount(WGPUQuerySet querySet)
 // {
@@ -1825,13 +1819,8 @@ void wgpuShaderModuleRelease(WGPUShaderModule shaderModule) {
 // {
 // }
 
-// void wgpuSurfaceAddRef(WGPUSurface surface)
-// {
-// }
-
-// void wgpuSurfaceRelease(WGPUSurface surface)
-// {
-// }
+void wgpuSurfaceAddRef(WGPUSurface surface) { (void)surface; }
+void wgpuSurfaceRelease(WGPUSurface surface) { (void)surface; }
 
 // void wgpuSurfaceCapabilitiesFreeMembers(WGPUSurfaceCapabilities surfaceCapabilities)
 // {
