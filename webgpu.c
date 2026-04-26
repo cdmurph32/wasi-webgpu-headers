@@ -103,12 +103,14 @@ typedef struct WGPUTextureViewImpl {
 
 static imports_string_t stringNativeToWasi(WGPUStringView const* label);
 static imports_option_string_t optionalStringNativeToWasi(WGPUStringView const* label);
+static WGPUStringView stringWasiToNative(imports_string_t const* string_wasi);
 static imports_option_string_t featureLevelNativeToWasi(WGPUFeatureLevel featureLevel);
 static wasi_webgpu_webgpu_option_gpu_power_preference_t powerPreferenceNativeToWasi(WGPUPowerPreference powerPreference);
 static wasi_webgpu_webgpu_gpu_feature_name_t featureNativeToWasi(WGPUFeatureName const feature);
 static imports_string_t featureNativeToWasiString(WGPUFeatureName const feature);
 static WGPUFeatureName featureWasiToNative(wasi_webgpu_webgpu_gpu_feature_name_t const feature);
 static wasi_webgpu_webgpu_option_own_record_option_gpu_size64_t limitsNativeToWasi(WGPULimits const* limits_native);
+static void limitsWasiToNative(wasi_webgpu_webgpu_own_gpu_supported_limits_t wasi_limits, WGPULimits* limits);
 static wasi_webgpu_webgpu_gpu_buffer_map_state_t bufferMapStateNativeToWasi(WGPUBufferMapState const bufferMapState);
 static WGPUBufferMapState bufferMapStateWasiToNative(wasi_webgpu_webgpu_gpu_buffer_map_state_t const buffer_map_state);
 
@@ -136,9 +138,14 @@ WGPUInstance wgpuCreateInstance(WGPUInstanceDescriptor const* descriptor) {
 // {
 // }
 
-// WGPUStatus wgpuAdapterGetLimits(WGPUAdapter adapter, WGPULimits* limits)
-// {
-// }
+WGPUStatus wgpuAdapterGetLimits(WGPUAdapter adapter, WGPULimits* limits) {
+    if (!adapter || !limits) unreachable();
+    wasi_webgpu_webgpu_own_gpu_supported_limits_t wasi_limits =
+        wasi_webgpu_webgpu_method_gpu_adapter_limits(wasi_webgpu_webgpu_borrow_gpu_adapter(adapter->adapter));
+    limitsWasiToNative(wasi_limits, limits);
+    wasi_webgpu_webgpu_gpu_supported_limits_drop_own(wasi_limits);
+    return WGPUStatus_Success;
+}
 
 WGPUBool wgpuAdapterHasFeature(WGPUAdapter adapter, WGPUFeatureName feature) {
     imports_string_t feature_wasi_string = featureNativeToWasiString(feature);
@@ -203,10 +210,12 @@ WGPUFuture wgpuAdapterRequestDevice(
 
     wasi_webgpu_webgpu_gpu_device_descriptor_free(&descriptor_wasi);
 
+    // WGPU_STRING_VIEW_INIT = {NULL, SIZE_MAX} — crashes ORT's StringViewAdapter.
+    static const WGPUStringView empty_msg = {.data = "", .length = 0};
     callbackInfo.callback(
         WGPURequestDeviceStatus_Success,
         device,
-        WGPU_STRING_VIEW_INIT,
+        empty_msg,
         callbackInfo.userdata1,
         callbackInfo.userdata2
     );
@@ -228,9 +237,12 @@ void wgpuAdapterRelease(WGPUAdapter adapter) {
     }
 }
 
-// void wgpuAdapterInfoFreeMembers(WGPUAdapterInfo adapterInfo)
-// {
-// }
+void wgpuAdapterInfoFreeMembers(WGPUAdapterInfo adapterInfo) {
+    if (adapterInfo.vendor.data) free((void*)adapterInfo.vendor.data);
+    if (adapterInfo.architecture.data) free((void*)adapterInfo.architecture.data);
+    if (adapterInfo.device.data) free((void*)adapterInfo.device.data);
+    if (adapterInfo.description.data) free((void*)adapterInfo.description.data);
+}
 
 // void wgpuBindGroupSetLabel(WGPUBindGroup bindGroup, WGPUStringView label)
 // {
@@ -270,9 +282,10 @@ void wgpuBindGroupLayoutRelease(WGPUBindGroupLayout bindGroupLayout) {
     }
 }
 
-// void wgpuBufferDestroy(WGPUBuffer buffer)
-// {
-// }
+void wgpuBufferDestroy(WGPUBuffer buffer) {
+    if (!buffer) return;
+    wasi_webgpu_webgpu_method_gpu_buffer_destroy(wasi_webgpu_webgpu_borrow_gpu_buffer(buffer->buffer));
+}
 
 void const* wgpuBufferGetConstMappedRange(WGPUBuffer buffer, size_t offset, size_t size) {
     return wgpuBufferGetMappedRange(buffer, offset, size);
@@ -359,8 +372,9 @@ WGPUFuture wgpuBufferMapAsync(
         todo();
     }
 
+    static const WGPUStringView empty_msg_map = {.data = "", .length = 0};
     callbackInfo
-        .callback(WGPUMapAsyncStatus_Success, WGPU_STRING_VIEW_INIT, callbackInfo.userdata1, callbackInfo.userdata2);
+        .callback(WGPUMapAsyncStatus_Success, empty_msg_map, callbackInfo.userdata1, callbackInfo.userdata2);
 
     return (WGPUFuture){.id = 0};
 }
@@ -570,10 +584,18 @@ wgpuCommandEncoderFinish(WGPUCommandEncoder commandEncoder, WGPUCommandBufferDes
 // {
 // }
 
-// void wgpuCommandEncoderResolveQuerySet(WGPUCommandEncoder commandEncoder, WGPUQuerySet querySet, uint32_t firstQuery,
-//     uint32_t queryCount, WGPUBuffer destination, uint64_t destinationOffset)
-// {
-// }
+void wgpuCommandEncoderResolveQuerySet(WGPUCommandEncoder commandEncoder, WGPUQuerySet querySet, uint32_t firstQuery,
+    uint32_t queryCount, WGPUBuffer destination, uint64_t destinationOffset) {
+    if (!commandEncoder || !querySet || !destination) unreachable();
+    wasi_webgpu_webgpu_method_gpu_command_encoder_resolve_query_set(
+        wasi_webgpu_webgpu_borrow_gpu_command_encoder(commandEncoder->command_encoder),
+        wasi_webgpu_webgpu_borrow_gpu_query_set(querySet->query_set),
+        firstQuery,
+        queryCount,
+        wasi_webgpu_webgpu_borrow_gpu_buffer(destination->buffer),
+        destinationOffset
+    );
+}
 
 // void wgpuCommandEncoderSetLabel(WGPUCommandEncoder commandEncoder, WGPUStringView label)
 // {
@@ -613,10 +635,15 @@ void wgpuComputePassEncoderDispatchWorkgroups(
     );
 }
 
-// void wgpuComputePassEncoderDispatchWorkgroupsIndirect(WGPUComputePassEncoder computePassEncoder,
-//     WGPUBuffer indirectBuffer, uint64_t indirectOffset)
-// {
-// }
+void wgpuComputePassEncoderDispatchWorkgroupsIndirect(WGPUComputePassEncoder computePassEncoder,
+    WGPUBuffer indirectBuffer, uint64_t indirectOffset) {
+    if (!computePassEncoder || !indirectBuffer) unreachable();
+    wasi_webgpu_webgpu_method_gpu_compute_pass_encoder_dispatch_workgroups_indirect(
+        wasi_webgpu_webgpu_borrow_gpu_compute_pass_encoder(computePassEncoder->compute_pass_encoder),
+        wasi_webgpu_webgpu_borrow_gpu_buffer(indirectBuffer->buffer),
+        indirectOffset
+    );
+}
 
 void wgpuComputePassEncoderEnd(WGPUComputePassEncoder computePassEncoder) {
     if (!computePassEncoder) unreachable();
@@ -934,13 +961,87 @@ wgpuDeviceCreateComputePipeline(WGPUDevice device, WGPUComputePipelineDescriptor
 // {
 // }
 
-// WGPUPipelineLayout wgpuDeviceCreatePipelineLayout(WGPUDevice device, WGPUPipelineLayoutDescriptor const* descriptor)
-// {
-// }
+WGPUPipelineLayout wgpuDeviceCreatePipelineLayout(WGPUDevice device,
+    WGPUPipelineLayoutDescriptor const* descriptor) {
+    if (!device || !descriptor) unreachable();
 
-// WGPUQuerySet wgpuDeviceCreateQuerySet(WGPUDevice device, WGPUQuerySetDescriptor const* descriptor)
-// {
-// }
+    wasi_webgpu_webgpu_list_option_borrow_gpu_bind_group_layout_t layouts_wasi = {
+        .ptr = malloc(descriptor->bindGroupLayoutCount * sizeof(wasi_webgpu_webgpu_option_borrow_gpu_bind_group_layout_t)),
+        .len = descriptor->bindGroupLayoutCount,
+    };
+    if (descriptor->bindGroupLayoutCount > 0 && !layouts_wasi.ptr) oom();
+
+    for (size_t i = 0; i < descriptor->bindGroupLayoutCount; i++) {
+        WGPUBindGroupLayout bgl = descriptor->bindGroupLayouts[i];
+        if (bgl) {
+            layouts_wasi.ptr[i].is_some = true;
+            layouts_wasi.ptr[i].val = wasi_webgpu_webgpu_borrow_gpu_bind_group_layout(bgl->bind_group_layout);
+        } else {
+            layouts_wasi.ptr[i].is_some = false;
+        }
+    }
+
+    wasi_webgpu_webgpu_gpu_pipeline_layout_descriptor_t descriptor_wasi = {
+        .bind_group_layouts = layouts_wasi,
+        .label = optionalStringNativeToWasi(&descriptor->label),
+    };
+
+    wasi_webgpu_webgpu_own_gpu_pipeline_layout_t pipeline_layout =
+        wasi_webgpu_webgpu_method_gpu_device_create_pipeline_layout(
+            wasi_webgpu_webgpu_borrow_gpu_device(device->device),
+            &descriptor_wasi
+        );
+
+    free(layouts_wasi.ptr);
+
+    WGPUPipelineLayoutImpl* pipeline_layout_struct = malloc(sizeof(WGPUPipelineLayoutImpl));
+    if (!pipeline_layout_struct) oom();
+    pipeline_layout_struct->pipeline_layout = pipeline_layout;
+    pipeline_layout_struct->refCount = 1;
+    return pipeline_layout_struct;
+}
+
+WGPUQuerySet wgpuDeviceCreateQuerySet(WGPUDevice device, WGPUQuerySetDescriptor const* descriptor) {
+    if (!device || !descriptor) unreachable();
+
+    wasi_webgpu_webgpu_gpu_query_type_t type_wasi;
+    switch (descriptor->type) {
+    case WGPUQueryType_Occlusion:
+        type_wasi = WASI_WEBGPU_WEBGPU_GPU_QUERY_TYPE_OCCLUSION;
+        break;
+    case WGPUQueryType_Timestamp:
+        type_wasi = WASI_WEBGPU_WEBGPU_GPU_QUERY_TYPE_TIMESTAMP;
+        break;
+    default:
+        unreachable();
+    }
+
+    wasi_webgpu_webgpu_gpu_query_set_descriptor_t descriptor_wasi = {
+        .type = type_wasi,
+        .count = descriptor->count,
+        .label = optionalStringNativeToWasi(&descriptor->label),
+    };
+
+    wasi_webgpu_webgpu_own_gpu_query_set_t query_set;
+    wasi_webgpu_webgpu_create_query_set_error_t err;
+    bool success = wasi_webgpu_webgpu_method_gpu_device_create_query_set(
+        wasi_webgpu_webgpu_borrow_gpu_device(device->device),
+        &descriptor_wasi,
+        &query_set,
+        &err
+    );
+
+    if (!success) {
+        wasi_webgpu_webgpu_create_query_set_error_free(&err);
+        todo();
+    }
+
+    WGPUQuerySetImpl* query_set_struct = malloc(sizeof(WGPUQuerySetImpl));
+    if (!query_set_struct) oom();
+    query_set_struct->query_set = query_set;
+    query_set_struct->refCount = 1;
+    return query_set_struct;
+}
 
 // WGPURenderBundleEncoder wgpuDeviceCreateRenderBundleEncoder(WGPUDevice device,
 //     WGPURenderBundleEncoderDescriptor const* descriptor)
@@ -1006,21 +1107,99 @@ WGPUShaderModule wgpuDeviceCreateShaderModule(WGPUDevice device, WGPUShaderModul
 // {
 // }
 
-// void wgpuDeviceDestroy(WGPUDevice device)
-// {
-// }
+void wgpuDeviceDestroy(WGPUDevice device) {
+    if (!device) return;
+    wasi_webgpu_webgpu_method_gpu_device_destroy(wasi_webgpu_webgpu_borrow_gpu_device(device->device));
+}
 
-// WGPUStatus wgpuDeviceGetAdapterInfo(WGPUDevice device, WGPUAdapterInfo* adapterInfo)
-// {
-// }
+WGPUStatus wgpuDeviceGetAdapterInfo(WGPUDevice device, WGPUAdapterInfo* adapterInfo) {
+    if (!device || !adapterInfo) unreachable();
+    wasi_webgpu_webgpu_own_gpu_adapter_info_t wasi_info =
+        wasi_webgpu_webgpu_method_gpu_device_adapter_info(wasi_webgpu_webgpu_borrow_gpu_device(device->device));
+    wasi_webgpu_webgpu_borrow_gpu_adapter_info_t wasi_info_borrow = wasi_webgpu_webgpu_borrow_gpu_adapter_info(wasi_info);
 
-// void wgpuDeviceGetFeatures(WGPUDevice device, WGPUSupportedFeatures* features)
-// {
-// }
+    *adapterInfo = WGPU_ADAPTER_INFO_INIT;
+    adapterInfo->subgroupMinSize = wasi_webgpu_webgpu_method_gpu_adapter_info_subgroup_min_size(wasi_info_borrow);
+    adapterInfo->subgroupMaxSize = wasi_webgpu_webgpu_method_gpu_adapter_info_subgroup_max_size(wasi_info_borrow);
 
-// WGPUStatus wgpuDeviceGetLimits(WGPUDevice device, WGPULimits* limits)
-// {
-// }
+    imports_string_t wasi_info_vendor;
+    wasi_webgpu_webgpu_method_gpu_adapter_info_vendor(wasi_info_borrow, &wasi_info_vendor);
+    adapterInfo->vendor = stringWasiToNative(&wasi_info_vendor);
+    imports_string_free(&wasi_info_vendor);
+
+    imports_string_t wasi_info_architecture;
+    wasi_webgpu_webgpu_method_gpu_adapter_info_architecture(wasi_info_borrow, &wasi_info_architecture);
+    adapterInfo->architecture = stringWasiToNative(&wasi_info_architecture);
+    imports_string_free(&wasi_info_architecture);
+
+    imports_string_t wasi_info_device;
+    wasi_webgpu_webgpu_method_gpu_adapter_info_device(wasi_info_borrow, &wasi_info_device);
+    adapterInfo->device = stringWasiToNative(&wasi_info_device);
+    imports_string_free(&wasi_info_device);
+
+    imports_string_t wasi_info_description;
+    wasi_webgpu_webgpu_method_gpu_adapter_info_description(wasi_info_borrow, &wasi_info_description);
+    adapterInfo->description = stringWasiToNative(&wasi_info_description);
+    imports_string_free(&wasi_info_description);
+
+    wasi_webgpu_webgpu_gpu_adapter_info_drop_own(wasi_info);
+    return WGPUStatus_Success;
+}
+
+void wgpuDeviceGetFeatures(WGPUDevice device, WGPUSupportedFeatures* features) {
+    if (!device || !features) unreachable();
+    wasi_webgpu_webgpu_own_gpu_supported_features_t wasi_features =
+        wasi_webgpu_webgpu_method_gpu_device_features(wasi_webgpu_webgpu_borrow_gpu_device(device->device));
+    wasi_webgpu_webgpu_borrow_gpu_supported_features_t b =
+        wasi_webgpu_webgpu_borrow_gpu_supported_features(wasi_features);
+
+    // enumerate all known feature names, collect those present
+    static const WGPUFeatureName kAllFeatures[] = {
+        WGPUFeatureName_DepthClipControl,
+        WGPUFeatureName_Depth32FloatStencil8,
+        WGPUFeatureName_TextureCompressionBC,
+        WGPUFeatureName_TextureCompressionBCSliced3D,
+        WGPUFeatureName_TextureCompressionETC2,
+        WGPUFeatureName_TextureCompressionASTC,
+        WGPUFeatureName_TextureCompressionASTCSliced3D,
+        WGPUFeatureName_TimestampQuery,
+        WGPUFeatureName_IndirectFirstInstance,
+        WGPUFeatureName_ShaderF16,
+        WGPUFeatureName_RG11B10UfloatRenderable,
+        WGPUFeatureName_BGRA8UnormStorage,
+        WGPUFeatureName_Float32Filterable,
+        WGPUFeatureName_Float32Blendable,
+        WGPUFeatureName_ClipDistances,
+        WGPUFeatureName_DualSourceBlending,
+        WGPUFeatureName_Subgroups,
+    };
+    static const size_t kFeatureCount = sizeof(kAllFeatures) / sizeof(kAllFeatures[0]);
+
+    WGPUFeatureName* features_native = malloc(kFeatureCount * sizeof(WGPUFeatureName));
+    if (!features_native) oom();
+    size_t count = 0;
+    for (size_t i = 0; i < kFeatureCount; i++) {
+        imports_string_t name = featureNativeToWasiString(kAllFeatures[i]);
+        bool has = wasi_webgpu_webgpu_method_gpu_supported_features_has(b, &name);
+        imports_string_free(&name);
+        if (has) {
+            features_native[count++] = kAllFeatures[i];
+        }
+    }
+    wasi_webgpu_webgpu_gpu_supported_features_drop_own(wasi_features);
+
+    features->featureCount = count;
+    features->features = features_native;
+}
+
+WGPUStatus wgpuDeviceGetLimits(WGPUDevice device, WGPULimits* limits) {
+    if (!device || !limits) unreachable();
+    wasi_webgpu_webgpu_own_gpu_supported_limits_t wasi_limits =
+        wasi_webgpu_webgpu_method_gpu_device_limits(wasi_webgpu_webgpu_borrow_gpu_device(device->device));
+    limitsWasiToNative(wasi_limits, limits);
+    wasi_webgpu_webgpu_gpu_supported_limits_drop_own(wasi_limits);
+    return WGPUStatus_Success;
+}
 
 // WGPUFuture wgpuDeviceGetLostFuture(WGPUDevice device)
 // {
@@ -1048,13 +1227,103 @@ WGPUBool wgpuDeviceHasFeature(WGPUDevice device, WGPUFeatureName feature) {
     );
 }
 
-// WGPUFuture wgpuDevicePopErrorScope(WGPUDevice device, WGPUPopErrorScopeCallbackInfo callbackInfo)
-// {
-// }
+WGPUFuture wgpuDevicePopErrorScope(WGPUDevice device, WGPUPopErrorScopeCallbackInfo callbackInfo) {
+    if (!device) unreachable();
 
-// void wgpuDevicePushErrorScope(WGPUDevice device, WGPUErrorFilter filter)
-// {
-// }
+    wasi_webgpu_webgpu_option_own_gpu_error_t wasi_popped_error = {};
+    wasi_webgpu_webgpu_pop_error_scope_error_t wasi_pop_error = {};
+    bool success = wasi_webgpu_webgpu_method_gpu_device_pop_error_scope(
+        wasi_webgpu_webgpu_borrow_gpu_device(device->device),
+        &wasi_popped_error,
+        &wasi_pop_error
+    );
+
+    if (!success) {
+        WGPUStringView pop_error_message = stringWasiToNative(&wasi_pop_error.message);
+        callbackInfo.callback(
+            WGPUPopErrorScopeStatus_Error,
+            WGPUErrorType_Unknown,
+            pop_error_message,
+            callbackInfo.userdata1,
+            callbackInfo.userdata2
+        );
+        free((void*)pop_error_message.data);
+        wasi_webgpu_webgpu_pop_error_scope_error_free(&wasi_pop_error);
+        return (WGPUFuture){.id = 0};
+    }
+
+    if (!wasi_popped_error.is_some) {
+        // WGPU_STRING_VIEW_INIT = {NULL, SIZE_MAX} — StringViewAdapter in ORT
+        // treats SIZE_MAX length as a crash. Use an explicit empty string instead.
+        static const WGPUStringView empty_msg = {.data = "", .length = 0};
+        callbackInfo.callback(
+            WGPUPopErrorScopeStatus_Success,
+            WGPUErrorType_NoError,
+            empty_msg,
+            callbackInfo.userdata1,
+            callbackInfo.userdata2
+        );
+        return (WGPUFuture){.id = 0};
+    }
+
+    wasi_webgpu_webgpu_borrow_gpu_error_t wasi_popped_error_borrow = wasi_webgpu_webgpu_borrow_gpu_error(wasi_popped_error.val);
+    wasi_webgpu_webgpu_gpu_error_kind_t kind;
+    wasi_webgpu_webgpu_method_gpu_error_kind(wasi_popped_error_borrow, &kind);
+    imports_string_t message = {};
+    wasi_webgpu_webgpu_method_gpu_error_message(wasi_popped_error_borrow, &message);
+
+    WGPUErrorType error_type;
+    switch (kind.tag) {
+    case WASI_WEBGPU_WEBGPU_GPU_ERROR_KIND_VALIDATION_ERROR:
+        error_type = WGPUErrorType_Validation;
+        break;
+    case WASI_WEBGPU_WEBGPU_GPU_ERROR_KIND_OUT_OF_MEMORY_ERROR:
+        error_type = WGPUErrorType_OutOfMemory;
+        break;
+    case WASI_WEBGPU_WEBGPU_GPU_ERROR_KIND_INTERNAL_ERROR:
+        error_type = WGPUErrorType_Internal;
+        break;
+    default:
+        error_type = WGPUErrorType_Unknown;
+        break;
+    }
+
+    WGPUStringView popped_error_message = stringWasiToNative(&message);
+    callbackInfo.callback(
+        WGPUPopErrorScopeStatus_Success,
+        error_type,
+        popped_error_message,
+        callbackInfo.userdata1,
+        callbackInfo.userdata2
+    );
+    free((void*)popped_error_message.data);
+
+    imports_string_free(&message);
+    wasi_webgpu_webgpu_gpu_error_drop_own(wasi_popped_error.val);
+    return (WGPUFuture){.id = 0};
+}
+
+void wgpuDevicePushErrorScope(WGPUDevice device, WGPUErrorFilter filter) {
+    if (!device) unreachable();
+    wasi_webgpu_webgpu_gpu_error_filter_t wasi_filter;
+    switch (filter) {
+    case WGPUErrorFilter_Validation:
+        wasi_filter = WASI_WEBGPU_WEBGPU_GPU_ERROR_FILTER_VALIDATION;
+        break;
+    case WGPUErrorFilter_OutOfMemory:
+        wasi_filter = WASI_WEBGPU_WEBGPU_GPU_ERROR_FILTER_OUT_OF_MEMORY;
+        break;
+    case WGPUErrorFilter_Internal:
+        wasi_filter = WASI_WEBGPU_WEBGPU_GPU_ERROR_FILTER_INTERNAL;
+        break;
+    default:
+        unreachable();
+    }
+    wasi_webgpu_webgpu_method_gpu_device_push_error_scope(
+        wasi_webgpu_webgpu_borrow_gpu_device(device->device),
+        wasi_filter
+    );
+}
 
 // void wgpuDeviceSetLabel(WGPUDevice device, WGPUStringView label)
 // {
@@ -1125,10 +1394,11 @@ WGPUFuture wgpuInstanceRequestAdapter(
 
     wasi_webgpu_webgpu_gpu_request_adapter_options_free(&wasi_options);
 
+    static const WGPUStringView empty_msg_adapter = {.data = "", .length = 0};
     callbackInfo.callback(
         WGPURequestAdapterStatus_Success,
         adapter,
-        WGPU_STRING_VIEW_INIT,
+        empty_msg_adapter,
         callbackInfo.userdata1,
         callbackInfo.userdata2
     );
@@ -1176,9 +1446,10 @@ void wgpuPipelineLayoutRelease(WGPUPipelineLayout pipelineLayout) {
     }
 }
 
-// void wgpuQuerySetDestroy(WGPUQuerySet querySet)
-// {
-// }
+void wgpuQuerySetDestroy(WGPUQuerySet querySet) {
+    if (!querySet) return;
+    wasi_webgpu_webgpu_method_gpu_query_set_destroy(wasi_webgpu_webgpu_borrow_gpu_query_set(querySet->query_set));
+}
 
 // uint32_t wgpuQuerySetGetCount(WGPUQuerySet querySet)
 // {
@@ -1542,9 +1813,9 @@ void wgpuShaderModuleRelease(WGPUShaderModule shaderModule) {
     }
 }
 
-// void wgpuSupportedFeaturesFreeMembers(WGPUSupportedFeatures supportedFeatures)
-// {
-// }
+void wgpuSupportedFeaturesFreeMembers(WGPUSupportedFeatures supportedFeatures) {
+    free((void*)supportedFeatures.features);
+}
 
 // void wgpuSupportedWGSLLanguageFeaturesFreeMembers(WGPUSupportedWGSLLanguageFeatures supportedWGSLLanguageFeatures)
 // {
@@ -1579,9 +1850,10 @@ void wgpuShaderModuleRelease(WGPUShaderModule shaderModule) {
 // {
 // }
 
-// void wgpuSurfaceRelease(WGPUSurface surface)
-// {
-// }
+void wgpuSurfaceRelease(WGPUSurface surface)
+{
+    (void)surface;
+}
 
 // void wgpuSurfaceCapabilitiesFreeMembers(WGPUSurfaceCapabilities surfaceCapabilities)
 // {
@@ -1669,11 +1941,17 @@ static imports_option_string_t optionalStringNativeToWasi(WGPUStringView const* 
     imports_option_string_t string_wasi = {};
     if (!stringNative || !stringNative->data) return string_wasi;
 
+    size_t len = stringNative->length;
+    if (len == WGPU_STRLEN) {
+        // WGPU_STRLEN sentinel means null-terminated — compute actual length
+        len = strlen(stringNative->data);
+    }
+
     string_wasi.is_some = true;
-    string_wasi.val.ptr = malloc(stringNative->length);
+    string_wasi.val.ptr = malloc(len);
     if (!string_wasi.val.ptr) oom();
-    memcpy(string_wasi.val.ptr, stringNative->data, stringNative->length);
-    string_wasi.val.len = stringNative->length;
+    memcpy(string_wasi.val.ptr, stringNative->data, len);
+    string_wasi.val.len = len;
 
     return string_wasi;
 }
@@ -1681,12 +1959,36 @@ static imports_option_string_t optionalStringNativeToWasi(WGPUStringView const* 
 static imports_string_t stringNativeToWasi(WGPUStringView const* stringNative) {
     if (!stringNative || !stringNative->data) unreachable();
 
+    size_t len = stringNative->length;
+    if (len == WGPU_STRLEN) {
+        // WGPU_STRLEN sentinel means null-terminated — compute actual length
+        len = strlen(stringNative->data);
+    }
+
     imports_string_t string_wasi = {};
-    string_wasi.ptr = malloc(stringNative->length);
-    memcpy(string_wasi.ptr, stringNative->data, stringNative->length);
-    string_wasi.len = stringNative->length;
+    string_wasi.ptr = malloc(len);
+    if (!string_wasi.ptr) oom();
+    memcpy(string_wasi.ptr, stringNative->data, len);
+    string_wasi.len = len;
 
     return string_wasi;
+}
+
+static WGPUStringView stringWasiToNative(imports_string_t const* string_wasi) {
+    if (string_wasi->len == 0) {
+        return (WGPUStringView){
+            .data = NULL,
+            .length = 0
+        };
+    }
+
+    char* buf = malloc(string_wasi->len);
+    if (!buf) oom();
+    memcpy(buf, string_wasi->ptr, string_wasi->len);
+    return (WGPUStringView){
+        .data = buf,
+        .length = string_wasi->len
+    };
 }
 
 static wasi_webgpu_webgpu_gpu_buffer_map_state_t bufferMapStateNativeToWasi(WGPUBufferMapState const bufferMapState) {
@@ -1960,4 +2262,40 @@ static wasi_webgpu_webgpu_option_own_record_option_gpu_size64_t limitsNativeToWa
     ADD_LIMIT_U32(maxComputeWorkgroupsPerDimension, "max-compute-workgroups-per-dimension");
 
     return output;
+}
+
+static void limitsWasiToNative(wasi_webgpu_webgpu_own_gpu_supported_limits_t wasi_limits, WGPULimits* limits) {
+    wasi_webgpu_webgpu_borrow_gpu_supported_limits_t wasi_limits_borrow =
+        wasi_webgpu_webgpu_borrow_gpu_supported_limits(wasi_limits);
+    limits->maxTextureDimension1D = wasi_webgpu_webgpu_method_gpu_supported_limits_max_texture_dimension1_d(wasi_limits_borrow);
+    limits->maxTextureDimension2D = wasi_webgpu_webgpu_method_gpu_supported_limits_max_texture_dimension2_d(wasi_limits_borrow);
+    limits->maxTextureDimension3D = wasi_webgpu_webgpu_method_gpu_supported_limits_max_texture_dimension3_d(wasi_limits_borrow);
+    limits->maxTextureArrayLayers = wasi_webgpu_webgpu_method_gpu_supported_limits_max_texture_array_layers(wasi_limits_borrow);
+    limits->maxBindGroups = wasi_webgpu_webgpu_method_gpu_supported_limits_max_bind_groups(wasi_limits_borrow);
+    limits->maxBindGroupsPlusVertexBuffers = wasi_webgpu_webgpu_method_gpu_supported_limits_max_bind_groups_plus_vertex_buffers(wasi_limits_borrow);
+    limits->maxBindingsPerBindGroup = wasi_webgpu_webgpu_method_gpu_supported_limits_max_bindings_per_bind_group(wasi_limits_borrow);
+    limits->maxDynamicUniformBuffersPerPipelineLayout = wasi_webgpu_webgpu_method_gpu_supported_limits_max_dynamic_uniform_buffers_per_pipeline_layout(wasi_limits_borrow);
+    limits->maxDynamicStorageBuffersPerPipelineLayout = wasi_webgpu_webgpu_method_gpu_supported_limits_max_dynamic_storage_buffers_per_pipeline_layout(wasi_limits_borrow);
+    limits->maxSampledTexturesPerShaderStage = wasi_webgpu_webgpu_method_gpu_supported_limits_max_sampled_textures_per_shader_stage(wasi_limits_borrow);
+    limits->maxSamplersPerShaderStage = wasi_webgpu_webgpu_method_gpu_supported_limits_max_samplers_per_shader_stage(wasi_limits_borrow);
+    limits->maxStorageBuffersPerShaderStage = wasi_webgpu_webgpu_method_gpu_supported_limits_max_storage_buffers_per_shader_stage(wasi_limits_borrow);
+    limits->maxStorageTexturesPerShaderStage = wasi_webgpu_webgpu_method_gpu_supported_limits_max_storage_textures_per_shader_stage(wasi_limits_borrow);
+    limits->maxUniformBuffersPerShaderStage = wasi_webgpu_webgpu_method_gpu_supported_limits_max_uniform_buffers_per_shader_stage(wasi_limits_borrow);
+    limits->maxUniformBufferBindingSize = wasi_webgpu_webgpu_method_gpu_supported_limits_max_uniform_buffer_binding_size(wasi_limits_borrow);
+    limits->maxStorageBufferBindingSize = wasi_webgpu_webgpu_method_gpu_supported_limits_max_storage_buffer_binding_size(wasi_limits_borrow);
+    limits->minUniformBufferOffsetAlignment = wasi_webgpu_webgpu_method_gpu_supported_limits_min_uniform_buffer_offset_alignment(wasi_limits_borrow);
+    limits->minStorageBufferOffsetAlignment = wasi_webgpu_webgpu_method_gpu_supported_limits_min_storage_buffer_offset_alignment(wasi_limits_borrow);
+    limits->maxVertexBuffers = wasi_webgpu_webgpu_method_gpu_supported_limits_max_vertex_buffers(wasi_limits_borrow);
+    limits->maxBufferSize = wasi_webgpu_webgpu_method_gpu_supported_limits_max_buffer_size(wasi_limits_borrow);
+    limits->maxVertexAttributes = wasi_webgpu_webgpu_method_gpu_supported_limits_max_vertex_attributes(wasi_limits_borrow);
+    limits->maxVertexBufferArrayStride = wasi_webgpu_webgpu_method_gpu_supported_limits_max_vertex_buffer_array_stride(wasi_limits_borrow);
+    limits->maxInterStageShaderVariables = wasi_webgpu_webgpu_method_gpu_supported_limits_max_inter_stage_shader_variables(wasi_limits_borrow);
+    limits->maxColorAttachments = wasi_webgpu_webgpu_method_gpu_supported_limits_max_color_attachments(wasi_limits_borrow);
+    limits->maxColorAttachmentBytesPerSample = wasi_webgpu_webgpu_method_gpu_supported_limits_max_color_attachment_bytes_per_sample(wasi_limits_borrow);
+    limits->maxComputeWorkgroupStorageSize = wasi_webgpu_webgpu_method_gpu_supported_limits_max_compute_workgroup_storage_size(wasi_limits_borrow);
+    limits->maxComputeInvocationsPerWorkgroup = wasi_webgpu_webgpu_method_gpu_supported_limits_max_compute_invocations_per_workgroup(wasi_limits_borrow);
+    limits->maxComputeWorkgroupSizeX = wasi_webgpu_webgpu_method_gpu_supported_limits_max_compute_workgroup_size_x(wasi_limits_borrow);
+    limits->maxComputeWorkgroupSizeY = wasi_webgpu_webgpu_method_gpu_supported_limits_max_compute_workgroup_size_y(wasi_limits_borrow);
+    limits->maxComputeWorkgroupSizeZ = wasi_webgpu_webgpu_method_gpu_supported_limits_max_compute_workgroup_size_z(wasi_limits_borrow);
+    limits->maxComputeWorkgroupsPerDimension = wasi_webgpu_webgpu_method_gpu_supported_limits_max_compute_workgroups_per_dimension(wasi_limits_borrow);
 }
